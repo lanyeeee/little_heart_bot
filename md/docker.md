@@ -12,7 +12,7 @@
 docker pull lanyeeee/little_heart:amd
 
 如果你的操作系统是 linux arm
-docker pull lanyeeee/little_heart:amd
+docker pull lanyeeee/little_heart:arm
 ```
 ### 2.启动容器
 ```
