@@ -1,5 +1,5 @@
 <p align="center">
-<img src="img/little_heart.png" width="200">
+<img src="img/little_heart.png">
 <h3 align="center">小心心bot</h3>
 
 # 简介
