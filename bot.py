@@ -114,7 +114,8 @@ def do_command(uid, command, parameter):
         sessions[uid]['cookie'] = ''
 
     elif command == '/cookie_append':
-        sessions[uid]['cookie'] += parameter
+        if parameter is not None:
+            sessions[uid]['cookie'] += parameter
         if len(sessions[uid]['cookie']) >= 2000:
             sessions[uid]['cookie'] = ''
 
@@ -232,4 +233,3 @@ if __name__ == '__main__':
             exc = traceback.format_exc()
             printer(exc)
             time.sleep(1)
-

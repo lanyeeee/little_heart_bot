@@ -153,7 +153,7 @@ def get_clients():
         })
 
     clients = clients[:10]
-    printer(f'get_clients: clients size = {len(clients)}')
+    # printer(f'get_clients: clients size = {len(clients)}')
 
 
 # room_id medal_id...
@@ -176,7 +176,7 @@ def get_up_data():
             continue
 
         client['up_data'] = []
-
+        num = 0
         for data in js['data']:
             client['up_data'].append({
                 'target_id': data['target_id'],
@@ -185,6 +185,11 @@ def get_up_data():
                 'today_intimacy': data['today_intimacy'],
                 'room_id': 0
             })
+            num += 1
+            if num == 6:
+                break
+
+        # printer(f'up_data size:{len(client["up_data"])}')
 
         for up_data in client['up_data'][:]:
             js = requests.get(
@@ -204,8 +209,8 @@ def get_up_data():
         if not client['up_data']:
             client_medal_invalid(client)
 
-    clients = clients[:5]
-    printer(f'get_up_data: clients size = {len(clients)}')
+    clients = clients[:3]
+    # printer(f'get_up_data: clients size = {len(clients)}')
 
 
 def get_bag_data(client):
@@ -213,13 +218,13 @@ def get_bag_data(client):
     return requests.get('https://api.live.bilibili.com/gift/v2/gift/bag_list', headers=headers).json()
 
 
-def give_gift(client, bag_id):
+def give_gift(client, bag_id, gift_num):
     headers = {'cookie': client['cookie']}
     payload = {
         'uid': client['uid'],
         'gift_id': 30607,
         'ruid': client['target_id'],
-        'gift_num': '24',
+        'gift_num': gift_num,
         'bag_id': bag_id,
         'platform': 'pc',
         'biz_code': 'Live',
@@ -260,6 +265,7 @@ def client_medal_invalid(client):
 
 def do_bag(client):
     little_heart_num = 0
+    bag_id = None
 
     bag_data = get_bag_data(client)
     if bag_data['code'] != 0:
@@ -268,32 +274,38 @@ def do_bag(client):
 
     for gift in bag_data['data']['list']:
         if gift['gift_id'] == 30607 and gift['corner_mark'] == '7天':
-            if gift['gift_num'] == 24:
-                printer(f'uid {client["uid"]} 今日24个小心心已获取完毕')
-                if client['auto_gift'] == 1:
-                    give_gift(client, gift['bag_id'])
+            little_heart_num = gift['gift_num']
+            bag_id = gift['bag_id']
 
-                client_complete(client)
-                return None
-            else:
-                little_heart_num = gift["gift_num"]
-
-    return little_heart_num
+    return little_heart_num, bag_id
 
 
 async def do_x(client, up_data, payload):
     await asyncio.sleep(payload['heartbeat_interval'])
-    response = post_x(client['cookie'], payload, up_data['room_id'])
+    index = 0
+    while True:
+        response = post_x(client['cookie'], payload, up_data['room_id'])
+        if response['code'] != 0:
+            printer(response)
+            printer(f'uid {client["uid"]} 发送X心跳包失败')
+            if response['code'] == 1012003:
+                return
+            raise ApiException()
 
-    if response['code'] != 0:
-        printer(f'uid {client["uid"]} 发送X心跳包失败')
-        raise ApiException()
+        # response['code'] == 1012002   timestamp error
+        # response['code'] == 1012003   分区数据错误
 
-    payload['ets'] = response['data']['timestamp']
-    payload['secret_key'] = response['data']['secret_key']
-    payload['heartbeat_interval'] = response['data']['heartbeat_interval']
-    payload['id'][2] += 1
-    return payload
+        payload['ets'] = response['data']['timestamp']
+        payload['secret_key'] = response['data']['secret_key']
+        payload['heartbeat_interval'] = response['data']['heartbeat_interval']
+        payload['id'][2] += 1
+
+        index += int(payload['heartbeat_interval']) / 60
+
+        if index > 6:
+            return
+
+        await asyncio.sleep(payload['heartbeat_interval'])
 
 
 async def do_client(client):
@@ -302,26 +314,18 @@ async def do_client(client):
         payload = post_e(client['cookie'], up_data['room_id'], client['uid'])
         tasks.append(do_x(client, up_data, payload))
 
-    while True:
-        payloads = await asyncio.gather(*tasks)
+    before_little_heart_num = do_bag(client)[0]
+    await asyncio.gather(*tasks)
+    [after_little_heart_num, bag_id] = do_bag(client)
 
-        little_heart_num = do_bag(client)
-        if little_heart_num is None:
-            return
-
-        if payloads[0]["id"][2] >= 8:
-            if client['little_heart_num'] == little_heart_num:
-                client_complete(client)
-            else:
-                cursor.execute(f'UPDATE clients_info SET little_heart_num={little_heart_num} WHERE uid={client["uid"]}')
-                printer(f'uid {client["uid"]} 已获取 {little_heart_num} 个小心心')
-            return
-
-        printer(f'uid {client["uid"]} 发送了第 {payloads[0]["id"][2] - 1} 轮心跳包')
-        tasks.clear()
-
-        for up_data, payload in zip(client['up_data'], payloads):
-            tasks.append(do_x(client, up_data, payload))
+    if after_little_heart_num == 24 or after_little_heart_num == before_little_heart_num:
+        client_complete(client)
+        if bag_id is not None and client['auto_gift'] == 1:
+            give_gift(client, bag_id, after_little_heart_num)
+    else:
+        cursor.execute(
+            f'UPDATE clients_info SET little_heart_num={after_little_heart_num} WHERE uid={client["uid"]}')
+        printer(f'uid {client["uid"]} 已获取 {after_little_heart_num} 个小心心')
 
 
 async def main():
@@ -352,4 +356,3 @@ if __name__ == '__main__':
         finally:
             clients.clear()
             time.sleep(5)
-
