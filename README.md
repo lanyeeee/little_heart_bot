@@ -22,5 +22,8 @@
 # 感谢
 - [bilibili-pcheartbeat](https://github.com/lkeme/bilibili-pcheartbeat)
 
+# 注意
+app.py和bot.py全部使用requests进行同步请求是有意为之，意在降低程序执行的效率，因为对B站api的请求过于频繁会导致ip被ban
+
 # License 许可证
 [GPL v3](LICENSE)
