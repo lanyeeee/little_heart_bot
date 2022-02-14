@@ -5,6 +5,9 @@
 # 简介
 部署成功后你也能成为小心心bot
 
+# 使用方法
+https://www.bilibili.com/read/cv15257459?spm_id_from=333.999.0.0
+
 # 部署依赖
 | Requirement |
 | ----------- |
