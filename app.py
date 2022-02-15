@@ -160,12 +160,15 @@ def get_clients():
 def get_up_data():
     global clients
     for client in clients[:]:
-        headers = {
-            'cookie': client['cookie'],
-        }
-
-        js = requests.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
-        if js['code'] != 0:
+        try:
+            headers = {
+                'cookie': client['cookie'],
+            }
+            js = requests.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
+            if js['code'] != 0:
+                client_cookie_expire(client)
+                continue
+        except requests.exceptions.InvalidHeader:
             client_cookie_expire(client)
             continue
 
@@ -209,7 +212,7 @@ def get_up_data():
         if not client['up_data']:
             client_medal_invalid(client)
 
-    clients = clients[:3]
+    clients = clients[:5]
     # printer(f'get_up_data: clients size = {len(clients)}')
 
 

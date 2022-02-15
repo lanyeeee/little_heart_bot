@@ -8,7 +8,6 @@ bot = {}
 headers = {}
 talking = True
 talk_num = 0
-s = requests.session()
 
 
 class ApiException(Exception):
@@ -167,8 +166,9 @@ def do_messages(uid, timestamp, messages):
 
 
 def next_day():
-    global zero_timestamp, talking
+    global zero_timestamp, talking, talk_num
     talking = True
+    talk_num = 0
     zero_timestamp = time.mktime(datetime.date.today().timetuple())
     cursor.execute('UPDATE clients_info SET completed = 0;')
     cursor.execute('UPDATE clients_info SET medal_invalid = 0;')
@@ -212,7 +212,7 @@ def main():
 
 
 if __name__ == '__main__':
-    next_day()
+    # next_day()
     get_bot()
     get_sessions()
     headers = {'cookie': bot['cookie']}
@@ -224,7 +224,7 @@ if __name__ == '__main__':
                 next_day()
 
             main()
-            time.sleep(2)
+            time.sleep(3)
         except ApiException:
             for i in range(0, 15):
                 printer(f'调用bilibili的API过于频繁，还需冷却 {15 - i} 分钟')
