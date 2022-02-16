@@ -157,63 +157,63 @@ def get_clients():
 
 
 # room_id medal_id...
-def get_up_data():
+def get_medal():
     global clients
     for client in clients[:]:
         try:
-            headers = {
-                'cookie': client['cookie'],
-            }
+            headers = {'cookie': client['cookie']}
             js = requests.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
             if js['code'] != 0:
                 client_cookie_expire(client)
                 continue
-        except requests.exceptions.InvalidHeader:
+        except Exception:
             client_cookie_expire(client)
             continue
 
         js = requests.get('https://api.live.bilibili.com/i/ajaxGetMyMedalList', headers=headers).json()
+        if js['code'] != 0:
+            printer(f'{client["uid"]} 获取粉丝牌列表失败')
+            raise ApiException()
 
         if not js['data']:
             client_medal_invalid(client)
             continue
 
-        client['up_data'] = []
-        num = 0
+        client['medal'] = []
+        medals = []
         for data in js['data']:
-            client['up_data'].append({
+            medals.append({
                 'target_id': data['target_id'],
                 'target_name': data['target_name'],
                 'medal_id': data['medal_id'],
                 'today_intimacy': data['today_intimacy'],
                 'room_id': 0
             })
-            num += 1
-            if num == 6:
-                break
 
-        # printer(f'up_data size:{len(client["up_data"])}')
-
-        for up_data in client['up_data'][:]:
+        i = 0
+        for medal in medals:
             js = requests.get(
-                f"http://api.live.bilibili.com/live_user/v1/Master/info?uid={up_data['target_id']}").json()
+                f"http://api.live.bilibili.com/live_user/v1/Master/info?uid={medal['target_id']}").json()
 
             if js['code'] != 0:
-                clients.remove(client)
                 printer(f'uid {client["uid"]} 获取room_id失败')
                 raise ApiException()
 
             if js['data']['room_id'] == 0:
-                client['up_data'].remove(up_data)
                 continue
 
-            up_data['room_id'] = js['data']['room_id']
+            medal['room_id'] = js['data']['room_id']
+            client['medal'].append(medal)
 
-        if not client['up_data']:
+            i += 1
+            if i == 12:
+                break
+
+        if not client['medal']:
             client_medal_invalid(client)
 
     clients = clients[:5]
-    # printer(f'get_up_data: clients size = {len(clients)}')
+    # printer(f'get_medal: clients size = {len(clients)}')
 
 
 def get_bag_data(client):
@@ -283,16 +283,18 @@ def do_bag(client):
     return little_heart_num, bag_id
 
 
-async def do_x(client, up_data, payload):
+async def do_x(client, medal, payload):
     await asyncio.sleep(payload['heartbeat_interval'])
     index = 0
     while True:
-        response = post_x(client['cookie'], payload, up_data['room_id'])
+        response = post_x(client['cookie'], payload, medal['room_id'])
         if response['code'] != 0:
             printer(response)
             printer(f'uid {client["uid"]} 发送X心跳包失败')
             if response['code'] == 1012003:
+                printer(f'payload: {payload}')
                 return
+                # {'id': [0, 0, 1, 11027533], 'device': '["AUTO8716422349901853","3E739D10D-174A-10DD5-61028-A5E3625BE56450692infoc"]', 'ts': 1645035410000, 'is_patch': 0, 'heart_beat': [], 'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36', 'csrf_token': '9d106ffca17096000833d2b9d2abd434', 'csrf': '9d106ffca17096000833d2b9d2abd434', 'visit_id': '', 'ets': 1645035410, 'secret_key': 'seacasdgyijfhofiuxoannn', 'heartbeat_interval': 60, 'secret_rule': [2, 5, 1, 4]}
             raise ApiException()
 
         # response['code'] == 1012002   timestamp error
@@ -313,9 +315,16 @@ async def do_x(client, up_data, payload):
 
 async def do_client(client):
     tasks = []
-    for up_data in client['up_data']:
-        payload = post_e(client['cookie'], up_data['room_id'], client['uid'])
-        tasks.append(do_x(client, up_data, payload))
+    i = 0
+    for medal in client['medal']:
+        payload = post_e(client['cookie'], medal['room_id'], client['uid'])
+
+        if payload['id'][0] != 0 and payload['id'][1] != 0:
+            tasks.append(do_x(client, medal, payload))
+            i += 1
+
+        if i == 6:
+            break
 
     before_little_heart_num = do_bag(client)[0]
     await asyncio.gather(*tasks)
@@ -344,12 +353,12 @@ if __name__ == '__main__':
         # noinspection PyBroadException
         try:
             get_clients()
-            get_up_data()
+            get_medal()
             asyncio.run(main())
 
         except ApiException:
-            for i in range(0, 15):
-                printer(f'调用bilibili的API过于频繁，还需冷却 {15 - i} 分钟')
+            for sleep_minute in range(0, 15):
+                printer(f'调用bilibili的API过于频繁，还需冷却 {15 - sleep_minute} 分钟')
                 time.sleep(60)
 
         except Exception:
