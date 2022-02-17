@@ -26,7 +26,11 @@ https://www.bilibili.com/read/cv15257459?spm_id_from=333.999.0.0
 - [bilibili-pcheartbeat](https://github.com/lkeme/bilibili-pcheartbeat)
 
 # 注意
-app.py和bot.py全部使用requests进行同步请求是有意为之，意在降低程序执行的效率，因为对B站api的请求过于频繁会导致ip被ban
+- app.py和bot.py全部使用requests进行同步请求而不采用更高效的异步是有意为之，意在避免并发，对B站api的请求过于频繁会导致ip被ban。  
+
+- 如果遇到私信发不出去，code=21024,message=你发消息的频率太高了，停下来休息一下吧。不建议干等。最好去找人工客服解决。  
+![](/img/staff1.png)
+![](/img/staff2.png)
 
 # License 许可证
 [GPL v3](LICENSE)
