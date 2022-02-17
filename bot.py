@@ -86,9 +86,13 @@ def send_config(uid):
     res = s.post('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', headers=headers, params=payload).json()
 
     if res['code'] != 0:
-        printer(f'今日私信发送数量达到了最大限制，共发了 {talk_num} 条')
-        talk_num = 0
-        talking = False
+        printer('私信发送失败')
+        if res['code'] == 21024:
+            printer(res)
+        else:
+            printer(f'今日私信发送数量达到了最大限制，共发了 {talk_num} 条')
+            talk_num = 0
+            talking = False
         return
 
     talk_num += 1
