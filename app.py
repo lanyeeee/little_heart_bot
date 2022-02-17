@@ -12,6 +12,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
 clients = []
+s = requests.Session()
 
 
 class ApiException(Exception):
@@ -50,7 +51,7 @@ def post_e(cookie, room_id, uid):
         'Cookie': cookie,
     }
 
-    js = requests.get(f'https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?&room_id={room_id}').json()
+    js = s.get(f'https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?&room_id={room_id}').json()
 
     if js['code'] != 0:
         printer(f'uid {uid} 获取直播间信息失败')
@@ -74,8 +75,8 @@ def post_e(cookie, room_id, uid):
 
     data = urlencode(payload)
 
-    response = requests.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
-                             data=data, verify=False).json()
+    response = s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
+                      data=data, verify=False).json()
 
     if response['code'] != 0:
         printer(f'uid {uid} 发送E心跳包失败')
@@ -124,12 +125,12 @@ def post_x(cookie, payload, room_id):
     }
     payload = urlencode(payload)
 
-    return requests.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/X', headers=headers,
-                         data=payload, verify=False).json()
+    return s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/X', headers=headers,
+                  data=payload, verify=False).json()
 
 
 def generate_s(data):
-    response = requests.post('http://localhost:3000/enc', json=data).json()
+    response = s.post('http://localhost:3000/enc', json=data).json()
     return response['s']
 
 
@@ -162,7 +163,7 @@ def get_medal():
     for client in clients[:]:
         try:
             headers = {'cookie': client['cookie']}
-            js = requests.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
+            js = s.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
             if js['code'] != 0:
                 client_cookie_expire(client)
                 continue
@@ -170,7 +171,7 @@ def get_medal():
             client_cookie_expire(client)
             continue
 
-        js = requests.get('https://api.live.bilibili.com/i/ajaxGetMyMedalList', headers=headers).json()
+        js = s.get('https://api.live.bilibili.com/i/ajaxGetMyMedalList', headers=headers).json()
         if js['code'] != 0:
             printer(f'{client["uid"]} 获取粉丝牌列表失败')
             raise ApiException()
@@ -192,7 +193,7 @@ def get_medal():
 
         i = 0
         for medal in medals:
-            js = requests.get(
+            js = s.get(
                 f"http://api.live.bilibili.com/live_user/v1/Master/info?uid={medal['target_id']}").json()
 
             if js['code'] != 0:
@@ -218,7 +219,7 @@ def get_medal():
 
 def get_bag_data(client):
     headers = {'cookie': client['cookie']}
-    return requests.get('https://api.live.bilibili.com/gift/v2/gift/bag_list', headers=headers).json()
+    return s.get('https://api.live.bilibili.com/gift/v2/gift/bag_list', headers=headers).json()
 
 
 def give_gift(client, bag_id, gift_num):
@@ -240,8 +241,8 @@ def give_gift(client, bag_id, gift_num):
     }
     print(payload)
 
-    js = requests.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
-                       params=payload).json()
+    js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
+                params=payload).json()
     if js['code'] == 0:
         printer(f'uid {client["uid"]} 自动送礼成功')
     else:

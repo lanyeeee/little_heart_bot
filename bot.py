@@ -2,6 +2,7 @@ import requests, time, re, pymysql, traceback, json, datetime
 
 db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
+s = requests.Session()
 zero_timestamp = time.mktime(datetime.date.today().timetuple())
 sessions = {}
 bot = {}
@@ -82,7 +83,7 @@ def send_config(uid):
           f'今日任务{completed}\n'
     payload['msg[content]'] = json.dumps({'content': msg})
 
-    res = requests.post('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', headers=headers, params=payload).json()
+    res = s.post('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', headers=headers, params=payload).json()
 
     if res['code'] != 0:
         printer(f'今日私信发送数量达到了最大限制，共发了 {talk_num} 条')
@@ -138,7 +139,7 @@ def do_command(uid, command, parameter):
     elif command == '/target':
         if parameter.isdigit():
             target_id = int(parameter)
-            res = requests.get(f'http://api.bilibili.com/x/space/acc/info?mid={target_id}').json()
+            res = s.get(f'http://api.bilibili.com/x/space/acc/info?mid={target_id}').json()
             if res['code'] == -400:
                 return
             if res['code'] != 0:
@@ -177,8 +178,8 @@ def next_day():
 
 
 def main():
-    res = requests.get('https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions?session_type=1',
-                       headers=headers).json()
+    res = s.get('https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions?session_type=1',
+                headers=headers).json()
     if res['code'] != 0:
         printer('获取session_list失败')
         raise ApiException()
@@ -189,7 +190,7 @@ def main():
             uid = session['talker_id']
             timestamp = session['last_msg']['timestamp']
 
-            res = requests.get(
+            res = s.get(
                 f'https://api.vc.bilibili.com/svr_sync/v1/svr_sync/fetch_session_msgs?talker_id={uid}&session_type=1',
                 headers=headers).json()
             if res['code'] != 0:
