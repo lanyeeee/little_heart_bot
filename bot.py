@@ -1,6 +1,7 @@
 import requests, time, re, pymysql, traceback, json, datetime
 
-db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
+db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True,
+                     unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
 s = requests.Session()
 zero_timestamp = time.mktime(datetime.date.today().timetuple())
@@ -229,12 +230,15 @@ if __name__ == '__main__':
                 next_day()
 
             main()
-            time.sleep(3)
+            time.sleep(5)
         except ApiException:
             for i in range(0, 15):
                 printer(f'调用bilibili的API过于频繁，还需冷却 {15 - i} 分钟')
                 time.sleep(60)
+        except requests.exceptions.ConnectionError as err:
+            printer(err)
+            time.sleep(5)
         except Exception:
             exc = traceback.format_exc()
             printer(exc)
-            time.sleep(1)
+            time.sleep(5)
