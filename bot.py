@@ -155,9 +155,9 @@ def do_command(uid, command, parameter):
             cursor.execute(f'UPDATE clients_info SET room_id={room_id} WHERE uid={uid}')
 
 
-def do_messages(uid, timestamp, messages):
+def do_messages(uid, last_timestamp, messages):
     for msg in messages:
-        if int(msg['timestamp']) > int(timestamp) and msg['sender_uid'] != bot['uid'] and msg['msg_type'] == 1:
+        if int(msg['timestamp']) > int(last_timestamp) and msg['sender_uid'] != bot['uid'] and msg['msg_type'] == 1:
             content = json.loads(msg['content'])['content']
             printer(f'{uid}:{content}')
             if content.startswith('/'):
