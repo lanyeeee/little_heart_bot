@@ -140,8 +140,8 @@ def get_clients():
     cursor.execute('SELECT * FROM clients_info')
     results = cursor.fetchall()
     for row in results:
-        # completed or cookie expire or medal invalid
-        if row[3] == 1 or row[6] == 1 or row[7] == 1:
+        # completed or cookie error or medal error
+        if row[3] == 1 or row[6] == -1 or row[7] != 0:
             continue
 
         clients.append({
@@ -149,8 +149,7 @@ def get_clients():
             'cookie': row[1],
             'auto_gift': row[2],
             'room_id': row[4],
-            'target_id': row[5],
-            'little_heart_num': row[8]
+            'target_id': row[5]
         })
 
     clients = clients[:10]
@@ -158,40 +157,36 @@ def get_clients():
 
 
 # room_id medal_id...
-def get_medal():
+def get_medals():
     global clients
     for client in clients[:]:
         try:
             headers = {'cookie': client['cookie']}
             js = s.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
             if js['code'] != 0:
-                client_cookie_expire(client)
+                client_cookie_error(client)
                 continue
         except Exception:
-            client_cookie_expire(client)
+            client_cookie_error(client)
             continue
 
+        cursor.execute(f'UPDATE clients_info SET cookie_status=1 WHERE uid = {client["uid"]}')
         js = s.get('https://api.live.bilibili.com/i/ajaxGetMyMedalList', headers=headers).json()
         if js['code'] != 0:
             printer(f'{client["uid"]} 获取粉丝牌列表失败')
             raise ApiException()
 
         if not js['data']:
-            client_medal_invalid(client)
+            client_medal_without(client)
             continue
 
-        client['medal'] = []
-        medals = []
-        for data in js['data']:
-            medals.append({
-                'target_id': data['target_id'],
-                'target_name': data['target_name'],
-                'medal_id': data['medal_id'],
-                'today_intimacy': data['today_intimacy'],
-                'room_id': 0
-            })
+        medals = [{
+            'target_id': data['target_id'],
+            'room_id': 0
+        } for data in js['data']]
 
         i = 0
+        client['medals'] = []
         for medal in medals:
             js = s.get(
                 f"http://api.live.bilibili.com/live_user/v1/Master/info?uid={medal['target_id']}").json()
@@ -204,14 +199,14 @@ def get_medal():
                 continue
 
             medal['room_id'] = js['data']['room_id']
-            client['medal'].append(medal)
+            client['medals'].append(medal)
 
             i += 1
             if i == 12:
                 break
 
-        if not client['medal']:
-            client_medal_invalid(client)
+        if not client['medals']:
+            client_medal_error(client)
 
     clients = clients[:5]
     # printer(f'get_medal: clients size = {len(clients)}')
@@ -239,13 +234,13 @@ def give_gift(client, bag_id, gift_num):
         'csrf_token': get_csrf(client['cookie']),
         'csrf': get_csrf(client['cookie'])
     }
-    print(payload)
 
     js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
                 params=payload).json()
     if js['code'] == 0:
         printer(f'uid {client["uid"]} 自动送礼成功')
     else:
+        printer(payload)
         printer(f'uid {client["uid"]} 自动送礼失败')
 
 
@@ -255,16 +250,22 @@ def client_complete(client):
     printer(f'uid {client["uid"]} 已完成')
 
 
-def client_cookie_expire(client):
-    cursor.execute(f'UPDATE clients_info set cookie_expire = 1 WHERE uid = {client["uid"]}')
+def client_cookie_error(client):
+    cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {client["uid"]}')
     clients.remove(client)
-    printer(f'uid {client["uid"]} 提供的cookie无效 或 已失效过期')
+    printer(f'uid {client["uid"]} 提供的cookie错误 或 已过期')
 
 
-def client_medal_invalid(client):
-    cursor.execute(f'UPDATE clients_info set medal_invalid = 1 WHERE uid = {client["uid"]}')
+def client_medal_without(client):
+    cursor.execute(f'UPDATE clients_info set medal_status=-1 WHERE uid = {client["uid"]}')
     clients.remove(client)
-    printer(f'uid {client["uid"]} 没有粉丝牌 或 粉丝牌对应的up都未开通直播间')
+    printer(f'uid {client["uid"]} 没有粉丝牌')
+
+
+def client_medal_error(client):
+    cursor.execute(f'UPDATE clients_info set medal_status=-2 WHERE uid = {client["uid"]}')
+    clients.remove(client)
+    printer(f'uid {client["uid"]} 所有粉丝牌对应的up都未开通直播间')
 
 
 def do_bag(client):
@@ -292,10 +293,6 @@ async def do_x(client, medal, payload):
         if response['code'] != 0:
             printer(response)
             printer(f'uid {client["uid"]} 发送X心跳包失败')
-            if response['code'] == 1012003:
-                printer(f'payload: {payload}')
-                return
-                # {'id': [0, 0, 1, 11027533], 'device': '["AUTO8716422349901853","3E739D10D-174A-10DD5-61028-A5E3625BE56450692infoc"]', 'ts': 1645035410000, 'is_patch': 0, 'heart_beat': [], 'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36', 'csrf_token': '9d106ffca17096000833d2b9d2abd434', 'csrf': '9d106ffca17096000833d2b9d2abd434', 'visit_id': '', 'ets': 1645035410, 'secret_key': 'seacasdgyijfhofiuxoannn', 'heartbeat_interval': 60, 'secret_rule': [2, 5, 1, 4]}
             raise ApiException()
 
         # response['code'] == 1012002   timestamp error
@@ -315,9 +312,9 @@ async def do_x(client, medal, payload):
 
 
 async def do_client(client):
-    tasks = []
     i = 0
-    for medal in client['medal']:
+    tasks = []
+    for medal in client['medals']:
         payload = post_e(client['cookie'], medal['room_id'], client['uid'])
 
         if payload['id'][0] != 0 and payload['id'][1] != 0:
@@ -336,8 +333,6 @@ async def do_client(client):
         if bag_id is not None and client['auto_gift'] == 1:
             give_gift(client, bag_id, after_little_heart_num)
     else:
-        cursor.execute(
-            f'UPDATE clients_info SET little_heart_num={after_little_heart_num} WHERE uid={client["uid"]}')
         printer(f'uid {client["uid"]} 已获取 {after_little_heart_num} 个小心心')
 
 
@@ -354,7 +349,7 @@ if __name__ == '__main__':
         # noinspection PyBroadException
         try:
             get_clients()
-            get_medal()
+            get_medals()
             asyncio.run(main())
 
         except ApiException:

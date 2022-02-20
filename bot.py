@@ -1,7 +1,6 @@
 import requests, time, re, pymysql, traceback, json, datetime
 
-db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True,
-                     unix_socket='/var/run/mysqld/mysqld.sock')
+db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
 s = requests.Session()
 zero_timestamp = time.mktime(datetime.date.today().timetuple())
@@ -37,7 +36,16 @@ def get_sessions():
     cursor.execute('SELECT * FROM sessions_info')
     results = cursor.fetchall()
     for row in results:
-        sessions[row[0]] = {'timestamp': row[1], 'cookie': '', 'send_timestamp': '0', 'config_num': 0}
+        uid = row[0]
+        cursor.execute(f'SELECT config_num FROM clients_info WHERE uid={uid}')
+        res = cursor.fetchone()
+        config_num = res[0] if res is not None else 0
+        sessions[uid] = {
+            'timestamp': row[1],
+            'cookie': '',
+            'send_timestamp': '0',
+            'config_num': config_num
+        }
 
 
 def get_bot():
@@ -72,15 +80,30 @@ def send_config(uid):
     auto_gift = '关闭' if row[2] == 0 else '开启'
     completed = '未完成' if row[3] == 0 else '已完成'
     target_id = row[5]
-    cookie_expire = '，而且大概率正常' if row[6] == 0 else '，但已过期或无效'
-    cookie_expire = '' if cookie == '无' else cookie_expire
-    medal_invalid = '正常' if row[7] == 0 else '没有粉丝牌或粉丝牌对应的up都未开通直播间'
+
+    cookie_status = row[6]
+    if cookie == '无':
+        cookie_status = ''
+    elif cookie_status == 0:
+        cookie_status = '，cookie还未被使用过'
+    elif cookie_status == 1:
+        cookie_status = '，上次使用时cookie还有效'
+    elif cookie_status == -1:
+        cookie_status = '，错误或已过期的cookie'
+
+    medal_status = row[7]
+    if medal_status == 0:
+        medal_status = '正常'
+    elif medal_status == -1:
+        medal_status = '没有粉丝牌'
+    elif medal_status == -2:
+        medal_status = '粉丝牌对应的主播都未开通直播间'
 
     msg = '' \
-          f'cookie状态：{cookie}{cookie_expire}\n' \
+          f'cookie状态：{cookie}{cookie_status}\n' \
           f'自动送礼状态：{auto_gift}\n' \
           f'自送送礼目标uid：{target_id}\n' \
-          f'粉丝牌状态：{medal_invalid}\n' \
+          f'粉丝牌状态：{medal_status}\n' \
           f'今日任务{completed}\n'
     payload['msg[content]'] = json.dumps({'content': msg})
 
@@ -106,13 +129,13 @@ def send_config(uid):
 def do_command(uid, command, parameter):
     cursor.execute(f'SELECT * FROM clients_info where uid={uid}')
     result = cursor.fetchall()
-    if not result:
+    if not result:  # 如果为空
         cursor.execute(f'INSERT INTO clients_info(uid) VALUES({uid})')
 
     if command == '/cookie_commit':
         if (sessions[uid]['cookie']) != '':
             cursor.execute(f'UPDATE clients_info SET cookie=%s WHERE uid={uid}', [sessions[uid]["cookie"]])
-            cursor.execute(f'UPDATE clients_info SET cookie_expire=0 WHERE uid={uid}')
+            cursor.execute(f'UPDATE clients_info SET cookie_status=0 WHERE uid={uid}')
             sessions[uid]['cookie'] = ''
 
     elif command == '/cookie_clear':
@@ -153,6 +176,12 @@ def do_command(uid, command, parameter):
             room_id = res['data']['live_room']['roomid']
             cursor.execute(f'UPDATE clients_info SET target_id={target_id} WHERE uid={uid}')
             cursor.execute(f'UPDATE clients_info SET room_id={room_id} WHERE uid={uid}')
+
+    elif command == '/message_set':
+        pass
+
+    elif command == '/message_delete':
+        pass
 
 
 def do_messages(uid, last_timestamp, messages):
