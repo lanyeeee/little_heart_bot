@@ -54,6 +54,7 @@ def post_e(cookie, room_id, uid):
     js = s.get(f'https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?&room_id={room_id}').json()
 
     if js['code'] != 0:
+        printer(js)
         printer(f'uid {uid} 获取直播间信息失败')
         raise ApiException()
 
@@ -79,6 +80,7 @@ def post_e(cookie, room_id, uid):
                       data=data, verify=False).json()
 
     if response['code'] != 0:
+        printer(response)
         printer(f'uid {uid} 发送E心跳包失败')
         raise ApiException()
 
@@ -173,6 +175,7 @@ def get_medals():
         cursor.execute(f'UPDATE clients_info SET cookie_status=1 WHERE uid = {client["uid"]}')
         js = s.get('https://api.live.bilibili.com/i/ajaxGetMyMedalList', headers=headers).json()
         if js['code'] != 0:
+            printer(js)
             printer(f'{client["uid"]} 获取粉丝牌列表失败')
             raise ApiException()
 
@@ -192,6 +195,7 @@ def get_medals():
                 f"http://api.live.bilibili.com/live_user/v1/Master/info?uid={medal['target_id']}").json()
 
             if js['code'] != 0:
+                printer(js)
                 printer(f'uid {client["uid"]} 获取room_id失败')
                 raise ApiException()
 
@@ -274,6 +278,7 @@ def do_bag(client):
 
     bag_data = get_bag_data(client)
     if bag_data['code'] != 0:
+        printer(bag_data)
         printer(f'uid {client["uid"]} 获取背包数据失败')
         raise ApiException()
 

@@ -171,6 +171,8 @@ def do_command(uid, command, parameter):
             if res['code'] == -400:
                 return
             if res['code'] != 0:
+                printer(res)
+                printer(f'uid {uid} 获取目标房间号失败')
                 raise ApiException()
 
             room_id = res['data']['live_room']['roomid']
@@ -215,6 +217,7 @@ def main():
     res = s.get('https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions?session_type=1',
                 headers=headers).json()
     if res['code'] != 0:
+        printer(res)
         printer('获取session_list失败')
         raise ApiException()
 
@@ -228,6 +231,7 @@ def main():
                 f'https://api.vc.bilibili.com/svr_sync/v1/svr_sync/fetch_session_msgs?talker_id={uid}&session_type=1',
                 headers=headers).json()
             if res['code'] != 0:
+                printer(res)
                 printer('获取session失败')
                 raise ApiException()
 
