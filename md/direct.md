@@ -21,7 +21,7 @@ use little_heart;
 **bot_info**
 ```
 CREATE TABLE `bot_info` (
-  `uid` int NOT NULL COMMENT 'uid',
+  `uid` bigint NOT NULL COMMENT 'uid',
   `cookie` varchar(2000) DEFAULT NULL COMMENT 'cookie',
   `dev_id` varchar(255) DEFAULT NULL COMMENT 'dev_id',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -29,30 +29,47 @@ CREATE TABLE `bot_info` (
   PRIMARY KEY (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 ```
+
 **clients_info**
 ```
 CREATE TABLE `clients_info` (
-  `uid` int NOT NULL COMMENT 'uid',
+  `uid` bigint NOT NULL COMMENT 'uid',
   `cookie` varchar(2000) DEFAULT NULL COMMENT 'cookie',
-  `auto_gift` int DEFAULT '0' COMMENT 'whether to automatically send the little heart',
+  `auto_gift` int DEFAULT '0' COMMENT '0 disable,1 enable',
   `completed` int DEFAULT '0' COMMENT 'completed or not',
   `room_id` varchar(20) DEFAULT NULL COMMENT 'little heart sent there',
   `target_id` varchar(20) DEFAULT NULL COMMENT 'little heart sent there',
-  `cookie_expire` int DEFAULT '0' COMMENT 'whether the cookie expire',
-  `medal_invalid` int DEFAULT '0' COMMENT 'whether the medal is invalid',
-  `little_heart_num` int DEFAULT '0' COMMENT 'how many little hearts this client get today',
+  `target_name` varchar(30) DEFAULT NULL COMMENT 'target name',
+  `cookie_status` int DEFAULT '0' COMMENT '0 unknow,1 normal,-1 error',
+  `medal_status` int DEFAULT '0' COMMENT '0 narmal,-1 without,-2 error',
   `config_num` int DEFAULT '0' COMMENT 'how many times the client check the config today',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 ```
+
+**messages_info**
+```
+CREATE TABLE `messages_info` (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+  `uid` bigint NOT NULL COMMENT 'uid',
+  `target_id` varchar(20) DEFAULT NULL COMMENT 'target id',
+  `target_name` varchar(30) DEFAULT NULL COMMENT 'target name',
+  `room_id` varchar(20) DEFAULT NULL COMMENT 'room id',
+  `content` varchar(30) DEFAULT NULL COMMENT 'content',
+  `msg_status` int DEFAULT '0' COMMENT '0 unfinished,1 completed,-1 invalid',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb3;
+```
+
 **sessions_info**
 ```
 CREATE TABLE `sessions_info` (
-  `uid` int NOT NULL COMMENT 'uid',
-  `timestamp` varchar(255) DEFAULT NULL COMMENT 'latest receive',
-  `send_timestamp` varchar(255) DEFAULT NULL COMMENT 'latest send',
+  `uid` bigint NOT NULL COMMENT 'uid',
+  `timestamp` varchar(255) DEFAULT '0' COMMENT 'latest receive',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`uid`)
