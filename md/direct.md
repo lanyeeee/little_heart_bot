@@ -24,6 +24,9 @@ CREATE TABLE `bot_info` (
   `uid` bigint NOT NULL COMMENT 'uid',
   `cookie` varchar(2000) DEFAULT NULL COMMENT 'cookie',
   `dev_id` varchar(255) DEFAULT NULL COMMENT 'dev_id',
+  `app_status` int NOT NULL DEFAULT '0' COMMENT '0 normal, -1 cooling',
+  `receive_status` int NOT NULL DEFAULT '0' COMMENT '0 normal, -1 cooling',
+  `send_status` int NOT NULL DEFAULT '0' COMMENT '0 normal, -1 cooling, -2 forbidden',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`uid`)
@@ -58,11 +61,11 @@ CREATE TABLE `messages_info` (
   `target_name` varchar(30) DEFAULT NULL COMMENT 'target name',
   `room_id` varchar(20) DEFAULT NULL COMMENT 'room id',
   `content` varchar(30) DEFAULT NULL COMMENT 'content',
-  `msg_status` int DEFAULT '0' COMMENT '0 unfinished,1 completed,-1 invalid',
+  `msg_status` int DEFAULT '0' COMMENT '0 unfinished,1 completed,-1 msg invalid,-2 UL error,-3 cookie invalid,-4 without room',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb3;
+) ENGINE=InnoDB AUTO_INCREMENT=71 DEFAULT CHARSET=utf8mb3;
 ```
 
 **sessions_info**

@@ -1,4 +1,4 @@
-import requests, time, re, pymysql, asyncio, traceback
+import requests, time, re, pymysql, asyncio, traceback, random
 
 # noinspection PyBroadException
 try:
@@ -12,6 +12,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
 clients = []
+msg_uid = []
 s = requests.Session()
 
 
@@ -136,38 +137,47 @@ def generate_s(data):
     return response['s']
 
 
-# mysql->python
 def get_clients():
     global clients
-    cursor.execute('SELECT * FROM clients_info')
+    cursor.execute(
+        'SELECT * FROM clients_info WHERE completed = 0 AND cookie_status != -1 AND medal_status = 0 LIMIT 10')
     results = cursor.fetchall()
-    for row in results:
-        # completed or cookie error or medal error
-        if row[3] == 1 or row[6] == -1 or row[7] != 0:
-            continue
 
-        clients.append({
-            'uid': row[0],
-            'cookie': row[1],
-            'auto_gift': row[2],
-            'room_id': row[4],
-            'target_id': row[5]
-        })
+    clients = [{
+        'uid': row[0],
+        'cookie': row[1],
+        'auto_gift': row[2],
+        'room_id': row[4],
+        'target_id': row[5]
+    } for row in results]
 
-    clients = clients[:10]
     # printer(f'get_clients: clients size = {len(clients)}')
 
 
-# room_id medal_id...
+def get_msg_uid():
+    global msg_uid
+    cursor.execute('SELECT DISTINCT uid FROM messages_info WHERE msg_status = 0 LIMIT 5')
+    rows = cursor.fetchall()
+    msg_uid = [row[0] for row in rows]
+
+
 def get_medals():
     global clients
     for client in clients[:]:
         try:
             headers = {'cookie': client['cookie']}
             js = s.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
+            if js['code'] == -412:
+                printer(js)
+                raise ApiException()
             if js['code'] != 0:
+                printer(js)
                 client_cookie_error(client)
                 continue
+
+        except ApiException:
+            raise
+
         except Exception:
             client_cookie_error(client)
             continue
@@ -212,7 +222,7 @@ def get_medals():
         if not client['medals']:
             client_medal_error(client)
 
-    clients = clients[:5]
+    clients = clients[:7]
     # printer(f'get_medal: clients size = {len(clients)}')
 
 
@@ -290,6 +300,77 @@ def do_bag(client):
     return little_heart_num, bag_id
 
 
+async def do_message(uid):
+    cursor.execute(f'SELECT * FROM messages_info WHERE msg_status=0 AND uid={uid}')
+    rows = cursor.fetchall()
+    for row in rows:
+        target_id = row[2]
+        target_name = row[3]
+        room_id = row[4]
+        msg = row[5]
+        if room_id == '0':
+            cursor.execute(f'UPDATE messages_info SET msg_status = -4 WHERE uid ={uid} AND room_id={room_id}')
+            printer(f'{target_id}({target_name}) 未开通直播间')
+            return
+
+        cursor.execute(f'SELECT cookie FROM clients_info WHERE uid={uid} and cookie_status = -1')
+        if cursor.fetchone() is not None:
+            cursor.execute(f'UPDATE messages_info SET msg_status = -3 WHERE uid ={uid}')
+            return
+
+        cursor.execute(f'SELECT cookie FROM clients_info WHERE uid={uid} and cookie_status = 1')
+        row = cursor.fetchone()
+        if row is None:
+            return
+
+        cookie = row[0]
+        headers = {'cookie': cookie}
+        try:
+            payload = {
+                'bubble': 0,
+                'msg': msg,
+                'color': 16777215,
+                'mode': 1,
+                'fontsize': 25,
+                'rnd': int(time.time()),
+                'roomid': room_id,
+                'csrf': get_csrf(cookie),
+                'csrf_token': get_csrf(cookie)
+            }
+
+            res = s.post('https://api.live.bilibili.com/msg/send', headers=headers, params=payload).json()
+
+            if res['msg'] == 'k':
+                printer(res)
+                printer(f'uid {uid} 给 {target_id}({target_name}) 发送的弹幕 "{msg}" 含有屏蔽词')
+                cursor.execute(f'UPDATE messages_info SET msg_status=-1 WHERE uid={uid} AND room_id={room_id}')
+                return
+
+            if res['code'] == -403:
+                printer(res)
+                printer(f'uid {uid} UL等级太低，无法给 {target_id}({target_name}) 发送弹幕 "{msg}" ')
+                cursor.execute(f'UPDATE messages_info SET msg_status=-2 WHERE uid={uid} AND room_id={room_id}')
+                return
+            elif res['code'] == -111 or res['code'] == -101:
+                printer(f'uid {uid} 提供的cookie错误 或 已过期')
+                cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
+            elif res['code'] != 0:
+                printer(res)
+                printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 失败')
+                raise ApiException()
+
+            cursor.execute(f'UPDATE messages_info SET msg_status=1 WHERE uid={uid} AND room_id={room_id}')
+            printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 成功')
+            await asyncio.sleep(3)
+
+        except ApiException:
+            raise
+
+        except Exception as er:
+            cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
+            printer(f'uid {uid} 提供的cookie有误，无法被解析')
+
+
 async def do_x(client, medal, payload):
     await asyncio.sleep(payload['heartbeat_interval'])
     index = 0
@@ -342,10 +423,10 @@ async def do_client(client):
 
 
 async def main():
-    tasks = []
-    for client in clients:
-        tasks.append(do_client(client))
+    tasks = [do_message(uid) for uid in msg_uid]
+    await asyncio.gather(*tasks)
 
+    tasks = [do_client(client) for client in clients]
     await asyncio.gather(*tasks)
 
 
@@ -353,14 +434,19 @@ if __name__ == '__main__':
     while True:
         # noinspection PyBroadException
         try:
+            get_msg_uid()
             get_clients()
             get_medals()
             asyncio.run(main())
-
+            cursor.execute('UPDATE bot_info SET app_status=0')
         except ApiException:
+            cursor.execute('UPDATE bot_info SET app_status=-1')
             for sleep_minute in range(0, 15):
                 printer(f'调用bilibili的API过于频繁，还需冷却 {15 - sleep_minute} 分钟')
                 time.sleep(60)
+
+        except requests.exceptions.ConnectionError as err:
+            printer(err)
 
         except Exception:
             exc = traceback.format_exc()
@@ -368,4 +454,4 @@ if __name__ == '__main__':
 
         finally:
             clients.clear()
-            time.sleep(5)
+            time.sleep(random.randint(3, 10))

@@ -1,7 +1,7 @@
-# docker 部署
+# Docker 部署
 
 ## 前提  
-- 操作系统：linux amd(绝大多数) 或 linux arm(树莓派等单片机)  
+- 操作系统：linux amd(绝大多数) 或 linux arm(树莓派等低功耗设备)  
 
 - 装好docker，且docker能正常使用  
 
@@ -54,8 +54,8 @@ ps
 列表里应有两个python3和一个node，如下面所示
 ```
 PID TTY          TIME   CMD
-    1 pts/0    00:00:00 sh
-    7 pts/0    00:00:00 sh
+  1 pts/0    00:00:00 sh
+  7 pts/0    00:00:00 sh
 319 pts/0    00:00:00 bash
 324 pts/0    00:00:00 python3
 325 pts/0    00:00:00 python3
