@@ -1,3 +1,5 @@
+import random
+
 import requests, time, re, pymysql, traceback, json, datetime
 
 db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
@@ -79,9 +81,9 @@ def send_config(uid):
     cookie = '无' if row[1] is None else '有'
     auto_gift = '关闭' if row[2] == 0 else '开启'
     completed = '未完成' if row[3] == 0 else '已完成'
-    target_id = row[5]
+    target_name = row[6]
 
-    cookie_status = row[6]
+    cookie_status = row[7]
     if cookie == '无':
         cookie_status = ''
     elif cookie_status == 0:
@@ -91,7 +93,7 @@ def send_config(uid):
     elif cookie_status == -1:
         cookie_status = '，错误或已过期的cookie'
 
-    medal_status = row[7]
+    medal_status = row[8]
     if medal_status == 0:
         medal_status = '正常'
     elif medal_status == -1:
@@ -102,9 +104,30 @@ def send_config(uid):
     msg = '' \
           f'cookie状态：{cookie}{cookie_status}\n' \
           f'自动送礼状态：{auto_gift}\n' \
-          f'自送送礼目标uid：{target_id}\n' \
+          f'自送送礼目标：{target_name}\n' \
           f'粉丝牌状态：{medal_status}\n' \
-          f'今日任务{completed}\n'
+          f'今日小心心任务{completed}\n\n' \
+          f'弹幕状态：\n'
+
+    cursor.execute(f'SELECT * FROM messages_info WHERE uid ={uid}')
+    rows = cursor.fetchall()
+    for row in rows:
+        target_id = row[2]
+        name = row[3]
+        content = row[5]
+
+        msg_status = '未发送'
+        if row[6] == 1:
+            msg_status = '已发送'
+        elif row[6] == -1:
+            msg_status = '含有屏蔽词'
+        elif row[6] == -2:
+            msg_status = '无法发送，因为UL等级低于直播间屏蔽等级'
+        elif row[6] == -3:
+            msg_status = '无法发送，因为cookie错误或已过期'
+
+        msg += f'{target_id}({name})："{content}" —— {msg_status}\n'
+
     payload['msg[content]'] = json.dumps({'content': msg})
 
     res = s.post('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', headers=headers, params=payload).json()
@@ -123,7 +146,6 @@ def send_config(uid):
     sessions[uid]['send_timestamp'] = str(timestamp)
     sessions[uid]['config_num'] += 1
     cursor.execute(f'UPDATE clients_info SET config_num={sessions[uid]["config_num"]} WHERE uid={uid};')
-    cursor.execute(f'UPDATE sessions_info SET send_timestamp={timestamp} WHERE uid={uid}')
 
 
 def do_command(uid, command, parameter):
@@ -134,8 +156,9 @@ def do_command(uid, command, parameter):
 
     if command == '/cookie_commit':
         if (sessions[uid]['cookie']) != '':
-            cursor.execute(f'UPDATE clients_info SET cookie=%s WHERE uid={uid}', [sessions[uid]["cookie"]])
-            cursor.execute(f'UPDATE clients_info SET cookie_status=0 WHERE uid={uid}')
+            cursor.execute(f'UPDATE clients_info SET cookie=%s,cookie_status=0 WHERE uid={uid}',
+                           [sessions[uid]["cookie"]])
+            cursor.execute(f'UPDATE messages_info SET msg_status = 0 WHERE uid ={uid}')
             sessions[uid]['cookie'] = ''
 
     elif command == '/cookie_clear':
@@ -166,7 +189,7 @@ def do_command(uid, command, parameter):
 
     elif command == '/target':
         if parameter.isdigit():
-            target_id = int(parameter)
+            target_id = parameter
             res = s.get(f'http://api.bilibili.com/x/space/acc/info?mid={target_id}').json()
             if res['code'] == -400:
                 return
@@ -176,14 +199,51 @@ def do_command(uid, command, parameter):
                 raise ApiException()
 
             room_id = res['data']['live_room']['roomid']
-            cursor.execute(f'UPDATE clients_info SET target_id={target_id} WHERE uid={uid}')
-            cursor.execute(f'UPDATE clients_info SET room_id={room_id} WHERE uid={uid}')
+            target_name = res['data']['name']
+            cursor.execute(
+                f'UPDATE clients_info SET room_id={room_id},target_id={target_id},target_name=%s WHERE uid={uid}',
+                target_name)
 
     elif command == '/message_set':
-        pass
+        arr = parameter.split(' ', 1)
+        if len(arr) == 2:
+            [target_id, content] = arr
+            content = content.strip()
+
+            if len(content) > 20:
+                return
+
+            cursor.execute(f'SELECT * FROM messages_info WHERE uid={uid}')
+            res = cursor.fetchall()
+            if len(res) >= 10:
+                return
+
+            res = s.get(f'http://api.bilibili.com/x/space/acc/info?mid={target_id}').json()
+            if res['code'] == -400:
+                return
+            if res['code'] != 0:
+                printer(res)
+                printer(f'uid {uid} 获取目标房间号失败')
+                raise ApiException()
+
+            room_id = res['data']['live_room']['roomid']
+
+            cursor.execute(f'SELECT * FROM messages_info WHERE uid={uid} AND target_id={target_id}')
+            if cursor.fetchone() is not None:
+                cursor.execute(
+                    f'UPDATE messages_info SET content=%s,msg_status=0 WHERE uid={uid} AND target_id={target_id}',
+                    content)
+            else:
+                target_name = res['data']['name']
+                cursor.execute(
+                    f'INSERT INTO messages_info (uid, target_id, target_name, room_id, content) VALUES({uid}, {target_id}, %s, {room_id}, %s)',
+                    [target_name, content])
 
     elif command == '/message_delete':
-        pass
+        if parameter == 'all':
+            cursor.execute(f'DELETE FROM messages_info WHERE uid={uid}')
+        elif parameter.isdigit():
+            cursor.execute(f'DELETE FROM messages_info WHERE uid={uid} AND target_id={parameter}')
 
 
 def do_messages(uid, last_timestamp, messages):
@@ -207,10 +267,8 @@ def next_day():
     talking = True
     talk_num = 0
     zero_timestamp = time.mktime(datetime.date.today().timetuple())
-    cursor.execute('UPDATE clients_info SET completed = 0;')
-    cursor.execute('UPDATE clients_info SET medal_invalid = 0;')
-    cursor.execute('UPDATE clients_info SET config_num = 0;')
-    return
+    cursor.execute('UPDATE clients_info SET completed=0,medal_status=0,config_num=0')
+    cursor.execute('UPDATE messages_info SET msg_status=0')
 
 
 def main():
@@ -263,15 +321,25 @@ if __name__ == '__main__':
                 next_day()
 
             main()
-            time.sleep(5)
+
+            cursor.execute('UPDATE bot_info SET receive_status=0')
+            if talking:
+                cursor.execute('UPDATE bot_info SET send_status=0')
+            else:
+                cursor.execute('UPDATE bot_info SET send_status=-2')
+
         except ApiException:
+            cursor.execute('UPDATE bot_info SET receive_status=-1,send_status=-1')
             for i in range(0, 15):
                 printer(f'调用bilibili的API过于频繁，还需冷却 {15 - i} 分钟')
                 time.sleep(60)
+
         except requests.exceptions.ConnectionError as err:
             printer(err)
-            time.sleep(5)
+
         except Exception:
             exc = traceback.format_exc()
             printer(exc)
-            time.sleep(5)
+
+        finally:
+            time.sleep(random.randint(5, 10))
