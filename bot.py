@@ -50,6 +50,18 @@ def get_sessions():
         }
 
 
+def update_sessions():
+    cursor.execute('SELECT * FROM sessions_info')
+    results = cursor.fetchall()
+    for row in results:
+        uid = row[0]
+        cursor.execute(f'SELECT config_num FROM clients_info WHERE uid={uid}')
+        res = cursor.fetchone()
+        config_num = res[0] if res is not None else 0
+        sessions[uid]['config_num'] = config_num
+        sessions[uid]['timestamp'] = row[1]
+
+
 def get_bot():
     cursor.execute('SELECT * FROM bot_info')
     row = cursor.fetchone()
@@ -125,7 +137,8 @@ def send_config(uid):
             msg_status = '无法发送，因为UL等级低于直播间屏蔽等级'
         elif row[6] == -3:
             msg_status = '无法发送，因为cookie错误或已过期'
-
+        elif row[6] == -4:
+            msg_status = f'无法发送，因为 {name} 未开通直播间'
         msg += f'{target_id}({name})："{content}" —— {msg_status}\n'
 
     payload['msg[content]'] = json.dumps({'content': msg})
@@ -310,8 +323,8 @@ def main():
 
 if __name__ == '__main__':
     # next_day()
-    get_bot()
     get_sessions()
+    get_bot()
     headers = {'cookie': bot['cookie']}
 
     while True:
@@ -320,8 +333,8 @@ if __name__ == '__main__':
             if time.time() - zero_timestamp > 87000:
                 next_day()
 
+            update_sessions()
             main()
-
             cursor.execute('UPDATE bot_info SET receive_status=0')
             if talking:
                 cursor.execute('UPDATE bot_info SET send_status=0')
