@@ -196,6 +196,7 @@ def do_command(uid, command, parameter):
         [config_num] = cursor.fetchone()
         cursor.execute(f'DELETE FROM clients_info WHERE uid={uid}')
         cursor.execute(f'INSERT INTO clients_info(uid,config_num) VALUES({uid},{config_num})')
+        cursor.execute(f'DELETE FROM messages_info WHERE uid={uid}')
         sessions[uid]['cookie'] = ''
 
     elif command == '/target':
