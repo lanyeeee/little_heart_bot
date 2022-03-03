@@ -1,6 +1,4 @@
-import random
-
-import requests, time, re, pymysql, traceback, json, datetime
+import requests, time, re, pymysql, traceback, json, datetime, random
 
 db = pymysql.connect(host='localhost', user='root', database='little_heart', autocommit=True, unix_socket='/var/run/mysqld/mysqld.sock')
 cursor = db.cursor()
@@ -134,7 +132,7 @@ def send_config(uid):
         elif row[6] == -1:
             msg_status = '含有屏蔽词'
         elif row[6] == -2:
-            msg_status = '无法发送，因为UL等级低于直播间屏蔽等级'
+            msg_status = '无法发送，可能是UL等级或粉丝牌等级低于直播间屏蔽等级'
         elif row[6] == -3:
             msg_status = '无法发送，因为cookie错误或已过期'
         elif row[6] == -4:
