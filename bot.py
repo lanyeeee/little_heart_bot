@@ -167,6 +167,7 @@ def do_command(uid, command, parameter):
 
     if command == '/cookie_commit':
         if (sessions[uid]['cookie']) != '':
+            sessions[uid]['cookie'] = sessions[uid]['cookie'].replace('\n', '')
             cursor.execute(f'UPDATE clients_info SET cookie=%s,cookie_status=0 WHERE uid={uid}',
                            [sessions[uid]["cookie"]])
             cursor.execute(f'UPDATE messages_info SET msg_status = 0 WHERE uid ={uid}')
@@ -325,6 +326,7 @@ if __name__ == '__main__':
     get_sessions()
     get_bot()
     headers = {'cookie': bot['cookie']}
+    # next_day()
 
     while True:
         # noinspection PyBroadException
