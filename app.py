@@ -164,8 +164,8 @@ def get_msg_uid():
 def get_medals():
     global clients
     for client in clients[:]:
+        headers = {'cookie': client['cookie']}
         try:
-            headers = {'cookie': client['cookie']}
             js = s.get('https://api.bilibili.com/x/web-interface/nav', headers=headers).json()
             if js['code'] == -412:
                 printer(js)
@@ -178,7 +178,9 @@ def get_medals():
         except ApiException:
             raise
 
-        except Exception:
+        except Exception as er:
+            printer(er)
+            printer(headers)
             client_cookie_error(client)
             continue
 
@@ -352,6 +354,7 @@ async def do_message(uid):
                 cursor.execute(f'UPDATE messages_info SET msg_status=-2 WHERE uid={uid} AND room_id={room_id}')
                 return
             elif res['code'] == -111 or res['code'] == -101:
+                printer(res)
                 printer(f'uid {uid} 提供的cookie错误 或 已过期')
                 cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
             elif res['code'] != 0:
