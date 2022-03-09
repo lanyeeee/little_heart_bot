@@ -289,36 +289,48 @@ def main():
                 headers=headers).json()
     if res['code'] != 0:
         printer(res)
-        printer('获取session_list失败')
+        printer('获取普通session_list失败')
         raise ApiException()
 
     session_list = res['data']['session_list']
+
+    res = s.get('https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions?session_type=5',
+                headers=headers).json()
+    if res['code'] != 0:
+        printer(res)
+        printer('获取被屏蔽的session_list失败')
+        raise ApiException()
+
+    session_list += res['data']['session_list']
+
     if session_list is not None:
         for session in session_list:
             uid = session['talker_id']
-            timestamp = session['last_msg']['timestamp']
 
-            res = s.get(
-                f'https://api.vc.bilibili.com/svr_sync/v1/svr_sync/fetch_session_msgs?talker_id={uid}&session_type=1',
-                headers=headers).json()
-            if res['code'] != 0:
-                printer(res)
-                printer('获取session失败')
-                raise ApiException()
+            timestamp = session['last_msg']['timestamp'] if session['last_msg'] is not None else 0
 
-            messages = res['data']['messages']
-            messages.reverse()
+            if uid not in sessions or timestamp > int(sessions[uid]['timestamp']):
+                res = s.get(
+                    f'https://api.vc.bilibili.com/svr_sync/v1/svr_sync/fetch_session_msgs?talker_id={uid}&session_type=1',
+                    headers=headers).json()
+                if res['code'] != 0:
+                    printer(res)
+                    printer('获取session失败')
+                    raise ApiException()
 
-            if uid in sessions:
-                cursor.execute(f'UPDATE sessions_info set timestamp={timestamp} WHERE uid={uid}')
-                last_timestamp = sessions[uid]['timestamp']
-                do_messages(uid, last_timestamp, messages)
-            else:
-                sessions[uid] = {'timestamp': '0', 'cookie': '', 'send_timestamp': '0', 'config_num': 0}
-                cursor.execute(f'INSERT INTO sessions_info(uid,timestamp) VALUES({uid},{timestamp})')
-                do_messages(uid, 0, messages)
+                messages = res['data']['messages']
+                messages.reverse()
 
-            sessions[uid]['timestamp'] = str(timestamp)
+                if uid in sessions:
+                    cursor.execute(f'UPDATE sessions_info set timestamp={timestamp} WHERE uid={uid}')
+                    last_timestamp = sessions[uid]['timestamp']
+                    do_messages(uid, last_timestamp, messages)
+                else:
+                    sessions[uid] = {'timestamp': '0', 'cookie': '', 'send_timestamp': '0', 'config_num': 0}
+                    cursor.execute(f'INSERT INTO sessions_info(uid,timestamp) VALUES({uid},{timestamp})')
+                    do_messages(uid, 0, messages)
+
+                sessions[uid]['timestamp'] = str(timestamp)
 
 
 if __name__ == '__main__':
@@ -356,4 +368,4 @@ if __name__ == '__main__':
             printer(exc)
 
         finally:
-            time.sleep(random.randint(5, 10))
+            time.sleep(1)
