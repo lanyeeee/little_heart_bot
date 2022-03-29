@@ -1,4 +1,4 @@
-import requests, time, re, pymysql, asyncio, traceback, random
+import requests, time, re, pymysql, asyncio, traceback
 
 # noinspection PyBroadException
 try:
@@ -62,34 +62,41 @@ def post_e(cookie, room_id, uid):
     room_info = js['data']['room_info']
     parent_area_id = int(room_info['parent_area_id'])
     area_id = int(room_info['area_id'])
+    try:
+        payload = {
+            'id': [parent_area_id, area_id, 1, room_id],
+            'device': '["AUTO8716422349901853","3E739D10D-174A-10DD5-61028-A5E3625BE56450692infoc"]',
+            # LIVE_BUVID + _uuid
+            'ts': int(time.time()) * 1000,
+            'is_patch': 0,
+            'heart_beat': [],
+            'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36',
+            'csrf_token': get_csrf(cookie),
+            'csrf': get_csrf(cookie),
+            'visit_id': ''
+        }
 
-    payload = {
-        'id': [parent_area_id, area_id, 1, room_id],
-        'device': '["AUTO8716422349901853","3E739D10D-174A-10DD5-61028-A5E3625BE56450692infoc"]',  # LIVE_BUVID + _uuid
-        'ts': int(time.time()) * 1000,
-        'is_patch': 0,
-        'heart_beat': [],
-        'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36',
-        'csrf_token': get_csrf(cookie),
-        'csrf': get_csrf(cookie),
-        'visit_id': ''
-    }
+        data = urlencode(payload)
 
-    data = urlencode(payload)
+        response = s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
+                          data=data, verify=False).json()
 
-    response = s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
-                      data=data, verify=False).json()
+        if response['code'] != 0:
+            printer(response)
+            printer(f'uid {uid} 发送E心跳包失败')
+            raise ApiException()
 
-    if response['code'] != 0:
-        printer(response)
-        printer(f'uid {uid} 发送E心跳包失败')
-        raise ApiException()
+        payload['ets'] = response['data']['timestamp']
+        payload['secret_key'] = response['data']['secret_key']
+        payload['heartbeat_interval'] = response['data']['heartbeat_interval']
+        payload['secret_rule'] = response['data']['secret_rule']
+        return payload
 
-    payload['ets'] = response['data']['timestamp']
-    payload['secret_key'] = response['data']['secret_key']
-    payload['heartbeat_interval'] = response['data']['heartbeat_interval']
-    payload['secret_rule'] = response['data']['secret_rule']
-    return payload
+    except ApiException:
+        raise
+    except Exception:
+        cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
+        printer(f'uid {uid} 提供的cookie有误，无法被解析')
 
 
 def post_x(cookie, payload, room_id):
@@ -235,29 +242,35 @@ def get_bag_data(client):
 
 def give_gift(client, bag_id, gift_num):
     headers = {'cookie': client['cookie']}
-    payload = {
-        'uid': client['uid'],
-        'gift_id': 30607,
-        'ruid': client['target_id'],
-        'gift_num': gift_num,
-        'bag_id': bag_id,
-        'platform': 'pc',
-        'biz_code': 'Live',
-        'biz_id': client['room_id'],
-        'storm_beat_id': '0',
-        'metadata': '',
-        'price': '0',
-        'csrf_token': get_csrf(client['cookie']),
-        'csrf': get_csrf(client['cookie'])
-    }
+    payload = {}
+    try:
+        payload = {
+            'uid': client['uid'],
+            'gift_id': 30607,
+            'ruid': client['target_id'],
+            'gift_num': gift_num,
+            'bag_id': bag_id,
+            'platform': 'pc',
+            'biz_code': 'Live',
+            'biz_id': client['room_id'],
+            'storm_beat_id': '0',
+            'metadata': '',
+            'price': '0',
+            'csrf_token': get_csrf(client['cookie']),
+            'csrf': get_csrf(client['cookie'])
+        }
 
-    js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
-                params=payload).json()
-    if js['code'] == 0:
-        printer(f'uid {client["uid"]} 自动送礼成功')
-    else:
-        printer(payload)
-        printer(f'uid {client["uid"]} 自动送礼失败')
+    except Exception:
+        cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {client["uid"]}')
+        printer(f'uid {client["uid"]} 提供的cookie有误，无法被解析')
+
+        js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
+                    params=payload).json()
+        if js['code'] == 0:
+            printer(f'uid {client["uid"]} 自动送礼成功')
+        else:
+            printer(payload)
+            printer(f'uid {client["uid"]} 自动送礼失败')
 
 
 def client_complete(client):
@@ -369,7 +382,7 @@ async def do_message(uid):
         except ApiException:
             raise
 
-        except Exception as er:
+        except Exception:
             cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
             printer(f'uid {uid} 提供的cookie有误，无法被解析')
 
@@ -457,4 +470,4 @@ if __name__ == '__main__':
 
         finally:
             clients.clear()
-            time.sleep(random.randint(3, 10))
+            time.sleep(5)
