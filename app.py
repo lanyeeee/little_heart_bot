@@ -264,13 +264,13 @@ def give_gift(client, bag_id, gift_num):
         cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {client["uid"]}')
         printer(f'uid {client["uid"]} 提供的cookie有误，无法被解析')
 
-        js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
-                    params=payload).json()
-        if js['code'] == 0:
-            printer(f'uid {client["uid"]} 自动送礼成功')
-        else:
-            printer(payload)
-            printer(f'uid {client["uid"]} 自动送礼失败')
+    js = s.post('https://api.live.bilibili.com/xlive/revenue/v2/gift/sendBag', headers=headers,
+                params=payload).json()
+    if js['code'] == 0:
+        printer(f'uid {client["uid"]} 自动送礼成功')
+    else:
+        printer(payload)
+        printer(f'uid {client["uid"]} 自动送礼失败')
 
 
 def client_complete(client):
