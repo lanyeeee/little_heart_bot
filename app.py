@@ -62,6 +62,7 @@ def post_e(cookie, room_id, uid):
     room_info = js['data']['room_info']
     parent_area_id = int(room_info['parent_area_id'])
     area_id = int(room_info['area_id'])
+    payload = {}
     try:
         payload = {
             'id': [parent_area_id, area_id, 1, room_id],
@@ -75,28 +76,25 @@ def post_e(cookie, room_id, uid):
             'csrf': get_csrf(cookie),
             'visit_id': ''
         }
-
-        data = urlencode(payload)
-
-        response = s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
-                          data=data, verify=False).json()
-
-        if response['code'] != 0:
-            printer(response)
-            printer(f'uid {uid} 发送E心跳包失败')
-            raise ApiException()
-
-        payload['ets'] = response['data']['timestamp']
-        payload['secret_key'] = response['data']['secret_key']
-        payload['heartbeat_interval'] = response['data']['heartbeat_interval']
-        payload['secret_rule'] = response['data']['secret_rule']
-        return payload
-
-    except ApiException:
-        raise
     except Exception:
         cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
         printer(f'uid {uid} 提供的cookie有误，无法被解析')
+
+    data = urlencode(payload)
+
+    response = s.post('https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E', headers=headers,
+                      data=data, verify=False).json()
+
+    if response['code'] != 0:
+        printer(response)
+        printer(f'uid {uid} 发送E心跳包失败')
+        raise ApiException()
+
+    payload['ets'] = response['data']['timestamp']
+    payload['secret_key'] = response['data']['secret_key']
+    payload['heartbeat_interval'] = response['data']['heartbeat_interval']
+    payload['secret_rule'] = response['data']['secret_rule']
+    return payload
 
 
 def post_x(cookie, payload, room_id):
@@ -259,7 +257,6 @@ def give_gift(client, bag_id, gift_num):
             'csrf_token': get_csrf(client['cookie']),
             'csrf': get_csrf(client['cookie'])
         }
-
     except Exception:
         cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {client["uid"]}')
         printer(f'uid {client["uid"]} 提供的cookie有误，无法被解析')
@@ -340,6 +337,7 @@ async def do_message(uid):
 
         cookie = row[0]
         headers = {'cookie': cookie}
+        payload = {}
         try:
             payload = {
                 'bubble': 0,
@@ -352,39 +350,35 @@ async def do_message(uid):
                 'csrf': get_csrf(cookie),
                 'csrf_token': get_csrf(cookie)
             }
-
-            res = s.post('https://api.live.bilibili.com/msg/send', headers=headers, params=payload).json()
-
-            if res['msg'] == 'k':
-                printer(res)
-                printer(f'uid {uid} 给 {target_id}({target_name}) 发送的弹幕 "{msg}" 含有屏蔽词')
-                cursor.execute(f'UPDATE messages_info SET msg_status=-1 WHERE uid={uid} AND room_id={room_id}')
-                return
-
-            if res['code'] == -403:
-                printer(res)
-                printer(f'uid {uid} UL等级太低，无法给 {target_id}({target_name}) 发送弹幕 "{msg}" ')
-                cursor.execute(f'UPDATE messages_info SET msg_status=-2 WHERE uid={uid} AND room_id={room_id}')
-                return
-            elif res['code'] == -111 or res['code'] == -101:
-                printer(res)
-                printer(f'uid {uid} 提供的cookie错误 或 已过期')
-                cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
-            elif res['code'] != 0:
-                printer(res)
-                printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 失败')
-                raise ApiException()
-
-            cursor.execute(f'UPDATE messages_info SET msg_status=1 WHERE uid={uid} AND room_id={room_id}')
-            printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 成功')
-            await asyncio.sleep(3)
-
-        except ApiException:
-            raise
-
         except Exception:
             cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
             printer(f'uid {uid} 提供的cookie有误，无法被解析')
+
+        res = s.post('https://api.live.bilibili.com/msg/send', headers=headers, params=payload).json()
+
+        if res['msg'] == 'k':
+            printer(res)
+            printer(f'uid {uid} 给 {target_id}({target_name}) 发送的弹幕 "{msg}" 含有屏蔽词')
+            cursor.execute(f'UPDATE messages_info SET msg_status=-1 WHERE uid={uid} AND room_id={room_id}')
+            return
+
+        if res['code'] == -403:
+            printer(res)
+            printer(f'uid {uid} UL等级太低，无法给 {target_id}({target_name}) 发送弹幕 "{msg}" ')
+            cursor.execute(f'UPDATE messages_info SET msg_status=-2 WHERE uid={uid} AND room_id={room_id}')
+            return
+        elif res['code'] == -111 or res['code'] == -101:
+            printer(res)
+            printer(f'uid {uid} 提供的cookie错误 或 已过期')
+            cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
+        elif res['code'] != 0:
+            printer(res)
+            printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 失败')
+            raise ApiException()
+
+        cursor.execute(f'UPDATE messages_info SET msg_status=1 WHERE uid={uid} AND room_id={room_id}')
+        printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 成功')
+        await asyncio.sleep(3)
 
 
 async def do_x(client, medal, payload):
