@@ -229,7 +229,7 @@ def get_medals():
         if not client['medals']:
             client_medal_error(client)
 
-    clients = clients[:7]
+    # clients = clients[:7]
     # printer(f'get_medal: clients size = {len(clients)}')
 
 
@@ -356,21 +356,21 @@ async def do_message(uid):
 
         res = s.post('https://api.live.bilibili.com/msg/send', headers=headers, params=payload).json()
 
-        if res['msg'] == 'k':
+        if res['code'] == -111 or res['code'] == -101:
             printer(res)
-            printer(f'uid {uid} 给 {target_id}({target_name}) 发送的弹幕 "{msg}" 含有屏蔽词')
-            cursor.execute(f'UPDATE messages_info SET msg_status=-1 WHERE uid={uid} AND room_id={room_id}')
+            printer(f'uid {uid} 提供的cookie错误 或 已过期')
+            cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
             return
-
-        if res['code'] == -403:
+        elif res['code'] == -403:
             printer(res)
             printer(f'uid {uid} UL等级太低，无法给 {target_id}({target_name}) 发送弹幕 "{msg}" ')
             cursor.execute(f'UPDATE messages_info SET msg_status=-2 WHERE uid={uid} AND room_id={room_id}')
             return
-        elif res['code'] == -111 or res['code'] == -101:
+        elif res['msg'] == 'k':
             printer(res)
-            printer(f'uid {uid} 提供的cookie错误 或 已过期')
-            cursor.execute(f'UPDATE clients_info set cookie_status=-1 WHERE uid = {uid}')
+            printer(f'uid {uid} 给 {target_id}({target_name}) 发送的弹幕 "{msg}" 含有屏蔽词')
+            cursor.execute(f'UPDATE messages_info SET msg_status=-1 WHERE uid={uid} AND room_id={room_id}')
+            return
         elif res['code'] != 0:
             printer(res)
             printer(f'uid {uid} 给 {target_id}({target_name}) 发送弹幕 "{msg}" 失败')
