@@ -2,6 +2,8 @@
 <img src="img/little_heart.png">
 <h3 align="center">小心心bot</h3>
 
+
+# 这个版本已弃用，新版在编写中
 # 简介
 部署成功后你也能成为小心心bot
 
