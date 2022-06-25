@@ -3,7 +3,8 @@
 <h3 align="center">小心心bot</h3>
 
 
-# 这个版本已弃用，新版在编写中
+# 这个版本已弃用
+[新版](https://github.com/lanyeeee/little_heart_bot_2)
 # 简介
 部署成功后你也能成为小心心bot
 
